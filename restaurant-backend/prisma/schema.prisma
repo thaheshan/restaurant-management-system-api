@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         String    @default("customer")
+  phone        String?
+  avatar       String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  orders         Order[]
+  refreshTokens  RefreshToken[]
+  reviews        Review[]
+  profile        CustomerProfile?
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("refresh_tokens")
+}
+
+model CustomerProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  loyaltyPoints   Int      @default(0)
+  totalOrders     Int      @default(0)
+  favoriteItemIds String   @default("[]")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("customer_profiles")
+}
+
+model MenuItem {
+  id              String   @id @default(uuid())
+  name            String
+  description     String
+  category        String
+  price           Float
+  originalPrice   Float?
+  imageUrl        String?
+  imageEmoji      String   @default("x")
+  ingredients     String   @default("[]")
+  allergens       String   @default("[]")
+  dietaryTags     String   @default("[]")
+  isAvailable     Boolean  @default(true)
+  isFeatured      Boolean  @default(false)
+  isPopular       Boolean  @default(false)
+  preparationTime Int      @default(20)
+  calories        Int      @default(0)
+  rating          Float    @default(0)
+  reviewCount     Int      @default(0)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  orderItems OrderItem[]
+  reviews    Review[]
+  @@map("menu_items")
+}
+
+model InventoryItem {
+  id           String    @id @default(uuid())
+  name         String
+  category     String
+  unit         String    @default("kg")
+  minimumStock Float     @default(0)
+  maximumStock Float     @default(100)
+  currentStock Float     @default(0)
+  healthStatus String    @default("good")
+  expiryDate   DateTime?
+  receivedDate DateTime  @default(now())
+  supplier     String?
+  pricePerUnit Float     @default(0)
+  location     String?
+  notes        String?
+  lastUpdated  DateTime  @updatedAt
+  createdAt    DateTime  @default(now())
+  @@map("inventory_items")
+}
+
+model Order {
+  id              String     @id @default(uuid())
+  orderNumber     String     @unique
+  userId          String?
+  customerName    String?
+  customerEmail   String?
+  status          String     @default("pending")
+  orderType       String     @default("dine-in")
+  tableNumber     Int?
+  deliveryAddress String?
+  notes           String?
+  subtotal        Float
+  tax             Float
+  deliveryFee     Float      @default(0)
+  discount        Float      @default(0)
+  total           Float
+  estimatedTime   Int        @default(25)
+  trackingStep    Int        @default(0)
+  promoCode       String?
+  loyaltyEarned   Int        @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  user       User?       @relation(fields: [userId], references: [id])
+  items      OrderItem[]
+  @@map("orders")
+}
+
+model OrderItem {
+  id         String   @id @default(uuid())
+  orderId    String
+  menuItemId String
+  quantity   Int
+  unitPrice  Float
+  total      Float
+  notes      String?
+  createdAt  DateTime @default(now())
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+  @@map("order_items")
+}
+
+model Review {
+  id         String   @id @default(uuid())
+  menuItemId String
+  userId     String
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("reviews")
+}
+
+model PromoCode {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  discount    Float
+  type        String    @default("percentage")
+  maxUses     Int       @default(100)
+  usedCount   Int       @default(0)
+  isActive    Boolean   @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  @@map("promo_codes")
+}

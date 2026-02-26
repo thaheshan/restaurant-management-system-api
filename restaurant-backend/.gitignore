@@ -1,0 +1,54 @@
+# =====================
+# Node / TypeScript
+# =====================
+node_modules/
+dist/
+build/
+.out/
+coverage/
+
+# =====================
+# Environment files
+# =====================
+.env
+.env.*
+!.env.example
+
+
+# =====================
+# Logs
+# =====================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =====================
+# OS files
+# =====================
+.DS_Store
+Thumbs.db
+
+# =====================
+# IDE / Editor
+# =====================
+.vscode/
+.idea/
+*.swp
+
+# =====================
+# Monorepo / Tooling
+# =====================
+.nx/
+.nx-cache/
+.turbo/
+.turbo-cache/
+.cache/
+
+# =====================
+# Docker
+# =====================
+**/docker-data/
+node_modules/
+.env
