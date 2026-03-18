@@ -1,0 +1,31 @@
+{
+  "name": "dinesmart-backend",
+  "version": "1.0.0",
+  "description": "DineSmart Restaurant Management System Backend",
+  "main": "index.js",
+  "scripts": {
+    "dev": "node src/index.js",
+    "start": "node src/index.js",
+    "seed": "node scripts/seed.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "pg": "^8.11.2",
+    "redis": "^4.6.11",
+    "jsonwebtoken": "^9.0.2",
+    "bcrypt": "^5.1.1",
+    "qrcode": "^1.5.3",
+    "socket.io": "^4.7.2",
+    "socket.io-client": "^4.7.2",
+    "axios": "^1.6.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
