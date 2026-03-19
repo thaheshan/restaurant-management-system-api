@@ -10,10 +10,13 @@ app.use(express.json());
 
 // Auth middleware
 const authMiddleware = (req, res, next) => {
-  // User info attached by gateway
-  if (!req.user) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  const userId = req.headers["x-user-id"];
+  const role = req.headers["x-user-role"];
+  const restaurantId = req.headers["x-restaurant-id"];
+  if (!userId) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
+  req.user = { userId, role, restaurantId };
   next();
 };
 
@@ -188,3 +191,4 @@ app.get('/restaurant/:restaurantId/orders', authMiddleware, async (req, res) => 
 app.listen(PORT, () => {
   console.log(`Order Service running on port ${PORT}`);
 });
+

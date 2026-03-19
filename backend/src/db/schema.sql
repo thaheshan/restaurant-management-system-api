@@ -159,15 +159,15 @@ CREATE TABLE IF NOT EXISTS promo_codes (
 );
 
 -- Create indexes for better performance
-CREATE INDEX idx_users_mobile ON users(mobile_number);
-CREATE INDEX idx_users_restaurant ON users(restaurant_id);
-CREATE INDEX idx_categories_restaurant ON categories(restaurant_id);
-CREATE INDEX idx_menu_items_category ON menu_items(category_id);
-CREATE INDEX idx_menu_items_restaurant ON menu_items(restaurant_id);
-CREATE INDEX idx_orders_user ON orders(user_id);
-CREATE INDEX idx_orders_restaurant ON orders(restaurant_id);
-CREATE INDEX idx_orders_status ON orders(order_status);
-CREATE INDEX idx_inventory_restaurant ON inventory(restaurant_id);
-CREATE INDEX idx_inventory_expiry ON inventory(expiry_date);
-CREATE INDEX idx_certifications_restaurant ON certifications(restaurant_id);
-CREATE INDEX idx_sanitization_restaurant ON sanitization_logs(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_users_mobile ON users(mobile_number);
+CREATE INDEX IF NOT EXISTS idx_users_restaurant ON users(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_categories_restaurant ON categories(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_menu_items_category ON menu_items(category_id);
+CREATE INDEX IF NOT EXISTS idx_menu_items_restaurant ON menu_items(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_restaurant ON orders(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(order_status);
+CREATE INDEX IF NOT EXISTS idx_inventory_restaurant ON inventory(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_expiry ON inventory(expiry_date);
+CREATE INDEX IF NOT EXISTS idx_certifications_restaurant ON certifications(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_sanitization_restaurant ON sanitization_logs(restaurant_id);

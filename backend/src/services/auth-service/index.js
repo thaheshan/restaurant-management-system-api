@@ -182,6 +182,69 @@ app.post('/verify-token', (req, res) => {
   }
 });
 
+
+// Register Admin
+app.post('/register', async (req, res) => {
+  try {
+    const { name, email, password, mobile, role } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email and password required' });
+    }
+
+    // Check if user already exists
+    const existing = await pool.query(
+      'SELECT * FROM users WHERE email = $1', [email]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+
+    // Hash password
+    const password_hash = await bcrypt.hash(password, 10);
+    const userId = uuidv4();
+
+    // Create restaurant first
+    const restaurantId = uuidv4();
+    await pool.query(
+      'INSERT INTO restaurants (id, name) VALUES ($1, $2)',
+      [restaurantId, `${name}s Restaurant`]
+    );
+
+    // Create user
+    const result = await pool.query(
+      `INSERT INTO users (id, name, email, password_hash, mobile_number, role, restaurant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [userId, name, email, password_hash, mobile || null, role || 'admin', restaurantId]
+    );
+
+    const user = result.rows[0];
+
+    const token = jwt.sign(
+      { userId: user.id, email: user.email, role: user.role, restaurantId: user.restaurant_id },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Registration successful',
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        restaurantId: user.restaurant_id,
+      },
+    });
+  } catch (error) {
+    console.error('Register error:', error);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Auth Service running on port ${PORT}`);
 });
+
