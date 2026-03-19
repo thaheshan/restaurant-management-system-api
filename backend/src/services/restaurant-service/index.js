@@ -197,3 +197,4 @@ app.post('/admin/categories', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Restaurant Service running on port ${PORT}`);
 });
+
