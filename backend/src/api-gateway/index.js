@@ -4,9 +4,14 @@ const { createProxyMiddleware } = require("http-proxy-middleware");
 require("dotenv").config();
 
 const app = express();
-const PORT = process.env.API_GATEWAY_PORT || 3000;
+const PORT = process.env.API_GATEWAY_PORT || 8000;
 
-app.use(cors());
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-user-id", "x-user-role", "x-restaurant-id"],
+}));
+app.options("*", cors());
 
 const authMiddleware = require("./middleware/auth");
 
@@ -14,15 +19,16 @@ app.get("/health", (req, res) => {
   res.json({ status: "API Gateway is running" });
 });
 
-// PUBLIC ROUTES
+// PUBLIC - Auth
 app.use("/api/auth", createProxyMiddleware({
-  target: process.env.AUTH_SERVICE_URL || "http://localhost:3001",
+  target: "http://localhost:3001",
   changeOrigin: true,
   pathRewrite: { "^/api/auth": "" },
 }));
 
+// PUBLIC - Restaurant
 app.use("/api/restaurant/public", createProxyMiddleware({
-  target: process.env.RESTAURANT_SERVICE_URL || "http://localhost:3002",
+  target: "http://localhost:3002",
   changeOrigin: true,
   pathRewrite: { "^/api/restaurant/public": "/public" },
 }));
@@ -48,31 +54,31 @@ const forwardUser = (proxyReq, req) => {
 };
 
 app.use("/api/orders", createProxyMiddleware({
-  target: process.env.ORDER_SERVICE_URL || "http://localhost:3003",
+  target: "http://localhost:3003",
   changeOrigin: true,
   pathRewrite: { "^/api/orders": "" },
-  on: { proxyReq: forwardUser },
+  onProxyReq: forwardUser,
 }));
 
 app.use("/api/restaurant/admin", createProxyMiddleware({
-  target: process.env.RESTAURANT_SERVICE_URL || "http://localhost:3002",
+  target: "http://localhost:3002",
   changeOrigin: true,
   pathRewrite: { "^/api/restaurant/admin": "/admin" },
-  on: { proxyReq: forwardUser },
+  onProxyReq: forwardUser,
 }));
 
 app.use("/api/inventory", createProxyMiddleware({
-  target: process.env.INVENTORY_SERVICE_URL || "http://localhost:3004",
+  target: "http://localhost:3004",
   changeOrigin: true,
   pathRewrite: { "^/api/inventory": "" },
-  on: { proxyReq: forwardUser },
+  onProxyReq: forwardUser,
 }));
 
 app.use("/api/hygiene", createProxyMiddleware({
-  target: process.env.HYGIENE_SERVICE_URL || "http://localhost:3005",
+  target: "http://localhost:3005",
   changeOrigin: true,
   pathRewrite: { "^/api/hygiene": "" },
-  on: { proxyReq: forwardUser },
+  onProxyReq: forwardUser,
 }));
 
 app.use((err, req, res, next) => {
