@@ -35,6 +35,7 @@ app.use("/api/restaurant/public", createProxyMiddleware({
 
 // PROTECTED ROUTES
 app.use("/api/orders", express.json(), authMiddleware);
+app.use("/api/orders/restaurant", express.json(), authMiddleware);
 app.use("/api/inventory", express.json(), authMiddleware);
 app.use("/api/restaurant/admin", express.json(), authMiddleware);
 app.use("/api/hygiene", express.json(), authMiddleware);
@@ -93,3 +94,4 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log("API Gateway running on port " + PORT);
 });
+
