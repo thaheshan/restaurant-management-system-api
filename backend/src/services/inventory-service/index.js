@@ -45,18 +45,12 @@ app.get('/restaurant/:restaurantId/expiry-alerts', authMiddleware, async (req, r
   try {
     const { restaurantId } = req.params;
     const today = new Date();
-    const threeDaysLater = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
-
-    const result = await pool.query(
-      `SELECT id, name, category, expiry_date, status
-       FROM inventory
-       WHERE restaurant_id = $1
-       AND expiry_date BETWEEN $2 AND $3
-       ORDER BY expiry_date ASC`,
-      [restaurantId, today.toISOString().split('T')[0], threeDaysLater.toISOString().split('T')[0]]
-    );
-
-    res.json({ success: true, expiringItems: result.rows });
+      const sevenDaysLater = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const result = await pool.query(
+        "SELECT id, name, category, quantity, unit, expiry_date, status, stock_level FROM inventory WHERE restaurant_id = $1 AND expiry_date AT TIME ZONE 'UTC' <= $2 ORDER BY expiry_date ASC",
+        [restaurantId, sevenDaysLater]
+      );
+      res.json({ success: true, expiringItems: result.rows });
   } catch (error) {
     console.error('Get expiry alerts error:', error);
     res.status(500).json({ error: 'Failed to fetch expiry alerts' });
@@ -159,7 +153,61 @@ app.get('/restaurant/:restaurantId/stats', authMiddleware, async (req, res) => {
   }
 });
 
+
+// Delete ingredient
+app.delete('/:ingredientId', authMiddleware, async (req, res) => {
+  try {
+    const { ingredientId } = req.params;
+    const result = await pool.query('DELETE FROM inventory WHERE id = $1 RETURNING id', [ingredientId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Ingredient not found' });
+    res.json({ success: true, message: 'Ingredient deleted' });
+  } catch (error) {
+    console.error('Delete ingredient error:', error);
+    res.status(500).json({ error: 'Failed to delete ingredient' });
+  }
+});
+
+// Daily usage - add or remove stock
+app.post('/:ingredientId/usage', authMiddleware, async (req, res) => {
+  try {
+    const { ingredientId } = req.params;
+    const { amount, type } = req.body; // type: 'add' or 'remove'
+    if (!amount || !type) return res.status(400).json({ error: 'Amount and type required' });
+
+    const current = await pool.query('SELECT * FROM inventory WHERE id = $1', [ingredientId]);
+    if (current.rows.length === 0) return res.status(404).json({ error: 'Ingredient not found' });
+
+    const currentQty = parseFloat(current.rows[0].quantity);
+    const changeAmount = parseFloat(amount);
+    const newQty = type === 'add' ? currentQty + changeAmount : Math.max(0, currentQty - changeAmount);
+
+    const minThreshold = parseFloat(current.rows[0].reorder_level || 0);
+    let stockLevel = 'ok';
+    if (newQty <= 0) stockLevel = 'critical';
+    else if (newQty <= minThreshold) stockLevel = 'low';
+
+    const result = await pool.query(
+      `UPDATE inventory SET quantity = $1, stock_level = $2 WHERE id = $3 RETURNING *`,
+      [newQty, stockLevel, ingredientId]
+    );
+    res.json({ success: true, ingredient: result.rows[0] });
+  } catch (error) {
+    console.error('Usage update error:', error);
+    res.status(500).json({ error: 'Failed to update usage' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Inventory Service running on port ${PORT}`);
 });
+
+
+
+
+
+
+
+
+
+
 
