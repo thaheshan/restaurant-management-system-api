@@ -194,7 +194,73 @@ app.post('/admin/categories', async (req, res) => {
   }
 });
 
+
+// -- Edit Category --------------------------------------
+app.put('/admin/categories/:categoryId', async (req, res) => {
+  try {
+    const { categoryId } = req.params;
+    const { name, description } = req.body;
+    if (!name) return res.status(400).json({ error: 'Category name is required' });
+    const result = await pool.query(
+      `UPDATE categories SET name = $1, description = $2 WHERE id = $3 RETURNING *`,
+      [name, description || '', categoryId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Category not found' });
+    res.json({ success: true, category: result.rows[0] });
+  } catch (error) {
+    console.error('Update category error:', error);
+    res.status(500).json({ error: 'Failed to update category' });
+  }
+});
+
+// -- Delete Category -------------------------------------
+app.delete('/admin/categories/:categoryId', async (req, res) => {
+  try {
+    const { categoryId } = req.params;
+    await pool.query('DELETE FROM menu_items WHERE category_id = $1', [categoryId]);
+    const result = await pool.query('DELETE FROM categories WHERE id = $1 RETURNING id', [categoryId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Category not found' });
+    res.json({ success: true, message: 'Category deleted successfully' });
+  } catch (error) {
+    console.error('Delete category error:', error);
+    res.status(500).json({ error: 'Failed to delete category' });
+  }
+});
+
+// -- Edit Menu Item --------------------------------------
+app.put('/admin/menu-items/:itemId', async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    const { name, description, price, ingredients, is_available } = req.body;
+    if (!name || !price) return res.status(400).json({ error: 'Name and price are required' });
+    const result = await pool.query(
+      `UPDATE menu_items SET name = $1, description = $2, price = $3, ingredients = $4, is_available = $5 WHERE id = $6 RETURNING *`,
+      [name, description || '', price, ingredients || '', is_available !== false, itemId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Menu item not found' });
+    res.json({ success: true, item: result.rows[0] });
+  } catch (error) {
+    console.error('Update menu item error:', error);
+    res.status(500).json({ error: 'Failed to update menu item' });
+  }
+});
+
+// -- Delete Menu Item ------------------------------------
+app.delete('/admin/menu-items/:itemId', async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    const result = await pool.query('DELETE FROM menu_items WHERE id = $1 RETURNING id', [itemId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Menu item not found' });
+    res.json({ success: true, message: 'Menu item deleted successfully' });
+  } catch (error) {
+    console.error('Delete menu item error:', error);
+    res.status(500).json({ error: 'Failed to delete menu item' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Restaurant Service running on port ${PORT}`);
 });
+
+
 

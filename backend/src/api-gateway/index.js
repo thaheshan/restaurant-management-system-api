@@ -19,7 +19,21 @@ app.get("/health", (req, res) => {
   res.json({ status: "API Gateway is running" });
 });
 
-// PUBLIC - Auth
+// PUBLIC - Auth logs (must be before /api/auth catch-all)
+app.use("/api/auth/logs", createProxyMiddleware({
+  target: "http://localhost:3001",
+  changeOrigin: true,
+  pathRewrite: { "^/api/auth/logs": "/logs" },
+}));
+
+// PUBLIC - Auth logout
+app.use("/api/auth/logout", createProxyMiddleware({
+  target: "http://localhost:3001",
+  changeOrigin: true,
+  pathRewrite: { "^/api/auth/logout": "/logout" },
+}));
+
+// PUBLIC - Auth (all other auth routes)
 app.use("/api/auth", createProxyMiddleware({
   target: "http://localhost:3001",
   changeOrigin: true,
@@ -94,4 +108,3 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log("API Gateway running on port " + PORT);
 });
-

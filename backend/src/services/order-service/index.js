@@ -188,7 +188,25 @@ app.get('/restaurant/:restaurantId/orders', authMiddleware, async (req, res) => 
   }
 });
 
+// Delete order (only served/completed orders)
+app.delete('/:orderId', authMiddleware, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const check = await pool.query('SELECT order_status FROM orders WHERE id = $1', [orderId]);
+    if (check.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
+    
+    await pool.query('DELETE FROM order_items WHERE order_id = $1', [orderId]);
+    await pool.query('DELETE FROM orders WHERE id = $1', [orderId]);
+    res.json({ success: true, message: 'Order deleted' });
+  } catch (error) {
+    console.error('Delete order error:', error);
+    res.status(500).json({ error: 'Failed to delete order' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Order Service running on port ${PORT}`);
 });
+
+
 
