@@ -25,14 +25,25 @@ function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+const { sendSMS } = require('../../utils/sms');
+
 app.post('/send-otp', async (req, res) => {
   try {
     const { mobileNumber } = req.body;
     if (!mobileNumber || mobileNumber.length < 10) return res.status(400).json({ error: 'Invalid mobile number' });
     const otp = generateOTP();
     await setAsync(`otp:${mobileNumber}`, otp, 300);
-    console.log(`[DEMO] OTP for ${mobileNumber}: ${otp}`);
-    res.json({ success: true, message: 'OTP sent successfully', demo_otp: otp });
+    
+    // Send SMS via text.lk
+    const smsResult = await sendSMS(mobileNumber, `Your DineSmart OTP is: ${otp}. Valid for 5 minutes.`);
+    console.log(`[SMS] OTP for ${mobileNumber}: ${otp}`, smsResult.success ? '(Sent)' : '(Failed/Config Missing)');
+    
+    res.json({ 
+      success: true, 
+      message: 'OTP sent successfully', 
+      demo_otp: otp, // Keep for testing for now
+      sms_status: smsResult.success ? 'sent' : 'failed'
+    });
   } catch (error) {
     console.error('Send OTP error:', error);
     res.status(500).json({ error: 'Failed to send OTP' });
@@ -61,7 +72,7 @@ app.post('/verify-otp', async (req, res) => {
     const token = jwt.sign(
       { userId: user.id, mobileNumber: user.mobile_number, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
     );
     res.json({ success: true, token, user: { id: user.id, mobileNumber: user.mobile_number, name: user.name, email: user.email, role: user.role } });
   } catch (error) {
@@ -82,12 +93,47 @@ app.post('/admin-login', async (req, res) => {
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role, restaurantId: user.restaurant_id },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
     );
     await logActivity(user.restaurant_id, user.id, user.name, user.email, user.role, 'login', req);
     res.json({ success: true, token, user: { id: user.id, email: user.email, name: user.name, role: user.role, restaurantId: user.restaurant_id } });
   } catch (error) {
     console.error('Admin login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+app.post('/customer-login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+    
+    const result = await pool.query('SELECT * FROM users WHERE email = $1 AND role = $2', [email, 'customer']);
+    if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
+    
+    const user = result.rows[0];
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    if (!passwordMatch) return res.status(401).json({ error: 'Invalid credentials' });
+    
+    const token = jwt.sign(
+      { userId: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
+    );
+    
+    res.json({ 
+      success: true, 
+      token, 
+      user: { 
+        id: user.id, 
+        email: user.email, 
+        name: user.name, 
+        role: user.role,
+        mobileNumber: user.mobile_number
+      } 
+    });
+  } catch (error) {
+    console.error('Customer login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
@@ -124,12 +170,54 @@ app.post('/register', async (req, res) => {
   try {
     const { name, email, password, mobile, role } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: 'Name, email and password required' });
-    const existing = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (existing.rows.length > 0) return res.status(400).json({ error: 'Email already registered' });
+    
+    // Check for existing email first
+    const existingEmail = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (existingEmail.rows.length > 0) return res.status(400).json({ error: 'Email already registered' });
+    
     const password_hash = await bcrypt.hash(password, 10);
-    const userId = uuidv4();
-    const restaurantId = uuidv4();
-    await pool.query('INSERT INTO restaurants (id, name) VALUES ($1, $2)', [restaurantId, `${name}s Restaurant`]);
+    let userId = uuidv4();
+    let restaurantId = null;
+
+    // Check for existing mobile number if provided
+    if (mobile) {
+      const existingMobile = await pool.query('SELECT * FROM users WHERE mobile_number = $1', [mobile]);
+      if (existingMobile.rows.length > 0) {
+        const existingUser = existingMobile.rows[0];
+        // If they already have an email or password, it's a conflict
+        if (existingUser.email || existingUser.password_hash) {
+          return res.status(400).json({ error: 'Mobile number already registered to another account' });
+        }
+        
+        // Match existing mobile-only user (OTP stub) - update them instead of creating new
+        console.log(`Updating existing mobile stub for ${mobile}`);
+        if (role === 'admin' && !existingUser.restaurant_id) {
+          restaurantId = uuidv4();
+          await pool.query('INSERT INTO restaurants (id, name) VALUES ($1, $2)', [restaurantId, `${name}s Restaurant`]);
+        } else {
+          restaurantId = existingUser.restaurant_id;
+        }
+
+        const updateResult = await pool.query(
+          'UPDATE users SET name = $1, email = $2, password_hash = $3, role = $4, restaurant_id = $5, updated_at = NOW() WHERE id = $6 RETURNING *',
+          [name, email, password_hash, role || 'admin', restaurantId, existingUser.id]
+        );
+        const user = updateResult.rows[0];
+        const token = jwt.sign(
+          { userId: user.id, email: user.email, role: user.role, restaurantId: user.restaurant_id },
+          process.env.JWT_SECRET,
+          { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
+        );
+        return res.status(201).json({ success: true, message: 'Account updated successfully', token, user: { id: user.id, name: user.name, email: user.email, role: user.role, restaurantId: user.restaurant_id } });
+      }
+    }
+
+    // Normal registration if no mobile conflict or no mobile provided
+    if (role === 'admin') {
+      restaurantId = uuidv4();
+      await pool.query('INSERT INTO restaurants (id, name) VALUES ($1, $2)', [restaurantId, `${name}s Restaurant`]);
+    }
+
     const result = await pool.query(
       'INSERT INTO users (id, name, email, password_hash, mobile_number, role, restaurant_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
       [userId, name, email, password_hash, mobile || null, role || 'admin', restaurantId]
@@ -138,7 +226,7 @@ app.post('/register', async (req, res) => {
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role, restaurantId: user.restaurant_id },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
     );
     res.status(201).json({ success: true, message: 'Registration successful', token, user: { id: user.id, name: user.name, email: user.email, role: user.role, restaurantId: user.restaurant_id } });
   } catch (error) {
@@ -152,7 +240,9 @@ app.get('/logs/:restaurantId', async (req, res) => {
     const { restaurantId } = req.params;
     const { limit = 200 } = req.query;
     const result = await pool.query(
-      'SELECT * FROM activity_logs WHERE restaurant_id = $1 ORDER BY created_at DESC LIMIT $2',
+      `SELECT id, restaurant_id, user_id, user_name, user_email, role, action, ip_address,
+              to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at
+       FROM activity_logs WHERE restaurant_id = $1 ORDER BY created_at DESC LIMIT $2`,
       [restaurantId, parseInt(limit)]
     );
     res.json({ success: true, logs: result.rows });

@@ -35,9 +35,9 @@ app.get('/public/category/:categoryId/items', async (req, res) => {
     const { categoryId } = req.params;
 
     const result = await pool.query(
-      `SELECT id, name, description, ingredients, price, image_url, is_discount, discount_percentage
+      `SELECT *
        FROM menu_items
-       WHERE category_id = $1 AND is_available = true
+       WHERE category_id = $1
        ORDER BY name ASC`,
       [categoryId]
     );
@@ -159,13 +159,13 @@ app.get('/admin/:restaurantId/qr-codes', async (req, res) => {
 // Add menu item
 app.post('/admin/menu-items', async (req, res) => {
   try {
-    const { restaurantId, categoryId, name, description, ingredients, price, imageUrl } = req.body;
+    const { restaurantId, categoryId, name, description, ingredients, price, image } = req.body;
 
     const itemId = uuidv4();
     await pool.query(
       `INSERT INTO menu_items (id, restaurant_id, category_id, name, description, ingredients, price, image_url)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [itemId, restaurantId, categoryId, name, description, ingredients, price, imageUrl]
+      [itemId, restaurantId, categoryId, name, description, ingredients, price, image || null]
     );
 
     res.json({ success: true, itemId });
@@ -178,13 +178,13 @@ app.post('/admin/menu-items', async (req, res) => {
 // Add category
 app.post('/admin/categories', async (req, res) => {
   try {
-    const { restaurantId, name, description, imageUrl } = req.body;
+    const { restaurantId, name, description, image } = req.body;
 
     const categoryId = uuidv4();
     await pool.query(
       `INSERT INTO categories (id, restaurant_id, name, description, image_url)
        VALUES ($1, $2, $3, $4, $5)`,
-      [categoryId, restaurantId, name, description, imageUrl]
+      [categoryId, restaurantId, name, description, image || null]
     );
 
     res.json({ success: true, categoryId });
@@ -199,11 +199,14 @@ app.post('/admin/categories', async (req, res) => {
 app.put('/admin/categories/:categoryId', async (req, res) => {
   try {
     const { categoryId } = req.params;
-    const { name, description } = req.body;
+    const { name, description, image } = req.body;
     if (!name) return res.status(400).json({ error: 'Category name is required' });
+    // image can be a Supabase URL (or null to leave unchanged)
     const result = await pool.query(
-      `UPDATE categories SET name = $1, description = $2 WHERE id = $3 RETURNING *`,
-      [name, description || '', categoryId]
+      `UPDATE categories
+       SET name = $1, description = $2, image_url = COALESCE($3, image_url)
+       WHERE id = $4 RETURNING *`,
+      [name, description || '', image || null, categoryId]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Category not found' });
     res.json({ success: true, category: result.rows[0] });
@@ -231,11 +234,15 @@ app.delete('/admin/categories/:categoryId', async (req, res) => {
 app.put('/admin/menu-items/:itemId', async (req, res) => {
   try {
     const { itemId } = req.params;
-    const { name, description, price, ingredients, is_available } = req.body;
+    const { name, description, price, ingredients, is_available, image } = req.body;
     if (!name || !price) return res.status(400).json({ error: 'Name and price are required' });
+    // image can be a Supabase URL (or null/undefined to leave unchanged)
     const result = await pool.query(
-      `UPDATE menu_items SET name = $1, description = $2, price = $3, ingredients = $4, is_available = $5 WHERE id = $6 RETURNING *`,
-      [name, description || '', price, ingredients || '', is_available !== false, itemId]
+      `UPDATE menu_items
+       SET name = $1, description = $2, price = $3, ingredients = $4,
+           is_available = $5, image_url = COALESCE($6, image_url)
+       WHERE id = $7 RETURNING *`,
+      [name, description || '', price, ingredients || '', is_available !== false, image || null, itemId]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Menu item not found' });
     res.json({ success: true, item: result.rows[0] });

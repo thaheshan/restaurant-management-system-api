@@ -8,6 +8,9 @@ const PORT = process.env.ORDER_SERVICE_PORT || 3003;
 
 app.use(express.json());
 
+// Ensure is_archived column exists at startup
+pool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT false').catch(() => {});
+
 // Auth middleware
 const authMiddleware = (req, res, next) => {
   const userId = req.headers["x-user-id"];
@@ -74,7 +77,8 @@ app.post('/place', authMiddleware, async (req, res) => {
 
     // Fetch complete order with items
     const completeOrder = await pool.query(
-      `SELECT o.*, json_agg(json_build_object('id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price)) as items
+      `SELECT o.*, to_char(o.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
+              json_agg(json_build_object('id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price)) as items
        FROM orders o
        LEFT JOIN order_items oi ON o.id = oi.order_id
        WHERE o.id = $1
@@ -95,7 +99,8 @@ app.get('/my-orders', authMiddleware, async (req, res) => {
     const userId = req.user?.userId;
 
     const result = await pool.query(
-      `SELECT o.*, json_agg(json_build_object('id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price)) as items
+      `SELECT o.*, to_char(o.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
+              json_agg(json_build_object('id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price)) as items
        FROM orders o
        LEFT JOIN order_items oi ON o.id = oi.order_id
        WHERE o.user_id = $1
@@ -117,7 +122,8 @@ app.get('/:orderId', authMiddleware, async (req, res) => {
     const { orderId } = req.params;
 
     const result = await pool.query(
-      `SELECT o.*, json_agg(json_build_object('id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price)) as items
+      `SELECT o.*, to_char(o.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at, 
+              json_agg(json_build_object('id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price)) as items
        FROM orders o
        LEFT JOIN order_items oi ON o.id = oi.order_id
        WHERE o.id = $1
@@ -166,19 +172,53 @@ app.put('/:orderId/status', authMiddleware, async (req, res) => {
   }
 });
 
+// Update order payment (customer)
+app.put('/:orderId/payment', authMiddleware, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { paymentMethod } = req.body;
+
+    if (!paymentMethod) {
+      return res.status(400).json({ error: 'Payment method required' });
+    }
+
+    const result = await pool.query(
+      `UPDATE orders 
+       SET payment_method = $1, 
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING *`,
+      [paymentMethod, orderId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    res.json({ success: true, order: result.rows[0] });
+  } catch (error) {
+    console.error('Update order payment error:', error);
+    res.status(500).json({ error: 'Failed to update payment' });
+  }
+});
+
 // Get restaurant's orders
 app.get('/restaurant/:restaurantId/orders', authMiddleware, async (req, res) => {
   try {
     const { restaurantId } = req.params;
 
+    const includeArchived = req.query.all === 'true';
+
     const result = await pool.query(
-      `SELECT o.*, json_agg(json_build_object('id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price)) as items
+      `SELECT o.*, to_char(o.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
+              json_agg(json_build_object('id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price)) as items
        FROM orders o
        LEFT JOIN order_items oi ON o.id = oi.order_id
        WHERE o.restaurant_id = $1
+         AND ($2 OR o.is_archived IS NOT TRUE)
        GROUP BY o.id
        ORDER BY o.created_at DESC`,
-      [restaurantId]
+      [restaurantId, includeArchived]
     );
 
     res.json({ success: true, orders: result.rows });
@@ -194,13 +234,52 @@ app.delete('/:orderId', authMiddleware, async (req, res) => {
     const { orderId } = req.params;
     const check = await pool.query('SELECT order_status FROM orders WHERE id = $1', [orderId]);
     if (check.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
-    
-    await pool.query('DELETE FROM order_items WHERE order_id = $1', [orderId]);
-    await pool.query('DELETE FROM orders WHERE id = $1', [orderId]);
+    await pool.query('UPDATE orders SET is_archived = true WHERE id = $1', [orderId]);
     res.json({ success: true, message: 'Order deleted' });
   } catch (error) {
     console.error('Delete order error:', error);
     res.status(500).json({ error: 'Failed to delete order' });
+  }
+});
+
+const { sendSMS } = require('../../utils/sms');
+
+// Request assistance for an order
+app.post('/request-assistant', authMiddleware, async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    if (!orderId) return res.status(400).json({ error: 'Order ID is required' });
+
+    const result = await pool.query(
+      `SELECT o.*, r.name as restaurant_name 
+       FROM orders o
+       JOIN restaurants r ON o.restaurant_id = r.id
+       WHERE o.id = $1`,
+      [orderId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const order = result.rows[0];
+    const waiterNumber = '0752570435';
+    const shortOrderId = order.id.slice(0, 8);
+    
+    const message = `*DineSmart Help Alert*\nTable ${order.table_number} is requesting assistance.\nOrder: ${shortOrderId}\nStatus: ${order.order_status}\nPlease attend immediately.`;
+
+    const smsResult = await sendSMS(waiterNumber, message);
+    
+    console.log(`[ASSISTANT] Request for order ${shortOrderId} at Table ${order.table_number}: (SMS ${smsResult.success ? 'Sent' : 'Failed'})`);
+
+    res.json({ 
+      success: true, 
+      message: 'Assistant requested successfully',
+      sms_sent: smsResult.success
+    });
+  } catch (error) {
+    console.error('Request assistant error:', error);
+    res.status(500).json({ error: 'Failed to request assistant' });
   }
 });
 

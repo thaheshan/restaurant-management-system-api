@@ -26,7 +26,7 @@ app.get('/restaurant/:restaurantId', authMiddleware, async (req, res) => {
     const { restaurantId } = req.params;
 
     const result = await pool.query(
-      `SELECT id, name, category, quantity, unit, expiry_date, status, stock_level
+      `SELECT id, name, category, quantity, unit, expiry_date, status, stock_level, reorder_level
        FROM inventory
        WHERE restaurant_id = $1
        ORDER BY name ASC`,
@@ -80,7 +80,7 @@ app.post('/', authMiddleware, async (req, res) => {
 app.put('/:ingredientId', authMiddleware, async (req, res) => {
   try {
     const { ingredientId } = req.params;
-    const { quantity, expiryDate, status } = req.body;
+    const { name, category, unit, quantity, expiryDate, status, reorderLevel } = req.body;
 
     const updates = [];
     const values = [];
@@ -89,6 +89,26 @@ app.put('/:ingredientId', authMiddleware, async (req, res) => {
     if (quantity !== undefined) {
       updates.push(`quantity = $${paramCount++}`);
       values.push(quantity);
+    }
+
+    if (name !== undefined) {
+      updates.push(`name = $${paramCount++}`);
+      values.push(name);
+    }
+
+    if (category !== undefined) {
+      updates.push(`category = $${paramCount++}`);
+      values.push(category);
+    }
+
+    if (unit !== undefined) {
+      updates.push(`unit = $${paramCount++}`);
+      values.push(unit);
+    }
+
+    if (reorderLevel !== undefined) {
+      updates.push(`reorder_level = $${paramCount++}`);
+      values.push(reorderLevel);
     }
 
     if (expiryDate) {
@@ -184,7 +204,7 @@ app.post('/:ingredientId/usage', authMiddleware, async (req, res) => {
     const minThreshold = parseFloat(current.rows[0].reorder_level || 0);
     let stockLevel = 'ok';
     if (newQty <= 0) stockLevel = 'critical';
-    else if (newQty <= minThreshold) stockLevel = 'low';
+    else if (newQty < 2) stockLevel = 'low';
 
     const result = await pool.query(
       `UPDATE inventory SET quantity = $1, stock_level = $2 WHERE id = $3 RETURNING *`,

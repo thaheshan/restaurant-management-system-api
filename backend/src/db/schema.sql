@@ -158,6 +158,19 @@ CREATE TABLE IF NOT EXISTS promo_codes (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- activity_logs table
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  restaurant_id UUID,
+  user_id UUID,
+  user_name VARCHAR(255),
+  user_email VARCHAR(255),
+  role VARCHAR(50),
+  action TEXT,
+  ip_address VARCHAR(50),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_users_mobile ON users(mobile_number);
 CREATE INDEX IF NOT EXISTS idx_users_restaurant ON users(restaurant_id);
@@ -171,3 +184,4 @@ CREATE INDEX IF NOT EXISTS idx_inventory_restaurant ON inventory(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_expiry ON inventory(expiry_date);
 CREATE INDEX IF NOT EXISTS idx_certifications_restaurant ON certifications(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_sanitization_restaurant ON sanitization_logs(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_restaurant ON activity_logs(restaurant_id);

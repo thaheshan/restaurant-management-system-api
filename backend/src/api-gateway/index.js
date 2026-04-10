@@ -1,7 +1,9 @@
 const express = require("express");
 const cors = require("cors");
+const multer = require("multer");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 require("dotenv").config();
+const supabase = require('../config/supabase');
 
 const app = express();
 const PORT = process.env.API_GATEWAY_PORT || 8000;
@@ -95,6 +97,42 @@ app.use("/api/hygiene", createProxyMiddleware({
   pathRewrite: { "^/api/hygiene": "" },
   onProxyReq: forwardUser,
 }));
+
+// ── IMAGE UPLOAD via Supabase Storage ──────────────────────────────────────
+const uploadMiddleware = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files are allowed'), false);
+  },
+});
+
+app.post('/api/upload/image', uploadMiddleware.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+
+    const bucket = req.query.bucket || 'menu-images';
+    const folder = req.query.folder || 'uploads';
+    const ext = (req.file.originalname.split('.').pop() || 'jpg').toLowerCase();
+    const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+    const { error } = await supabase.storage
+      .from(bucket)
+      .upload(filename, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
+
+    if (error) {
+      console.error('Supabase upload error:', error.message);
+      return res.status(500).json({ error: 'Failed to upload image', details: error.message });
+    }
+
+    const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(filename);
+    return res.json({ success: true, url: urlData.publicUrl, path: filename });
+  } catch (err) {
+    console.error('Upload error:', err);
+    return res.status(500).json({ error: 'Image upload failed', details: err.message });
+  }
+});
 
 app.use((err, req, res, next) => {
   console.error("Gateway Error:", err);
