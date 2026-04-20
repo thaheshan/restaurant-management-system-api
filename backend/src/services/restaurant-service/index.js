@@ -123,11 +123,13 @@ app.post('/admin/generate-qr', async (req, res) => {
       color: { dark: '#2B7C4F', light: '#FFFFFF' },
     });
 
-    // Save to database
+    // Save to database (upsert — update if table already has a QR)
     const qrId = uuidv4();
     await pool.query(
       `INSERT INTO table_qrs (id, restaurant_id, table_number, qr_code, qr_data)
-       VALUES ($1, $2, $3, $4, $5)`,
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (restaurant_id, table_number)
+       DO UPDATE SET qr_code = EXCLUDED.qr_code, qr_data = EXCLUDED.qr_data`,
       [qrId, restaurantId, tableNumber, qrCodeDataURL, qrPayload]
     );
 

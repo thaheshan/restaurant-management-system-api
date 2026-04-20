@@ -6,6 +6,8 @@ async function seedDatabase() {
   const client = await pool.connect();
   try {
     console.log('Starting database seed...');
+    console.log('Clearing existing data...');
+    await client.query('TRUNCATE TABLE users CASCADE;');
 
     // Create restaurant
     const restaurantId = uuidv4();
@@ -16,9 +18,9 @@ async function seedDatabase() {
 
     // Insert admin user
     await client.query(
-      `INSERT INTO users (id, email, name, password_hash, role, restaurant_id)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [adminUserId, 'admin@dinesmart.com', 'Admin User', hashedPassword, 'admin', restaurantId]
+      `INSERT INTO users (id, mobile_number, email, name, password_hash, role, restaurant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [adminUserId, '0000000000', 'admin@dinesmart.com', 'Admin User', hashedPassword, 'admin', restaurantId]
     );
 
     // Insert restaurant
@@ -107,12 +109,12 @@ async function seedDatabase() {
     // Insert inventory items
     const inventoryItems = [
       { name: 'Chicken', category: 'meat', quantity: 15, unit: 'kg', expiryDate: '2025-04-15', status: 'fresh' },
-      { name: 'Prawns', category: 'seafood', quantity: 8, unit: 'kg', expiryDate: '2025-02-20', status: 'warning' },
+      { name: 'Prawns', category: 'seafood', quantity: 8, unit: 'kg', expiryDate: '2025-02-20', status: 'fresh' },
       { name: 'Carrots', category: 'vegetable', quantity: 20, unit: 'kg', expiryDate: '2025-03-30', status: 'fresh' },
       { name: 'Tomatoes', category: 'vegetable', quantity: 12, unit: 'kg', expiryDate: '2025-02-10', status: 'expired' },
       { name: 'Spices Mix', category: 'spice', quantity: 5, unit: 'kg', expiryDate: '2025-08-01', status: 'fresh' },
       { name: 'Beans', category: 'vegetable', quantity: 10, unit: 'kg', expiryDate: '2025-04-01', status: 'fresh' },
-      { name: 'Ginger', category: 'spice', quantity: 2, unit: 'kg', expiryDate: '2025-02-28', status: 'warning' },
+      { name: 'Ginger', category: 'spice', quantity: 2, unit: 'kg', expiryDate: '2025-02-28', status: 'fresh' },
       { name: 'Garlic', category: 'spice', quantity: 3, unit: 'kg', expiryDate: '2025-03-15', status: 'fresh' },
       { name: 'Onions', category: 'vegetable', quantity: 50, unit: 'kg', expiryDate: '2025-03-20', status: 'fresh' },
     ];

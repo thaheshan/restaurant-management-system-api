@@ -263,7 +263,7 @@ app.post('/request-assistant', authMiddleware, async (req, res) => {
     }
 
     const order = result.rows[0];
-    const waiterNumber = '0752570435';
+    const waiterNumber = '0776872971';
     const shortOrderId = order.id.slice(0, 8);
     
     const message = `*DineSmart Help Alert*\nTable ${order.table_number} is requesting assistance.\nOrder: ${shortOrderId}\nStatus: ${order.order_status}\nPlease attend immediately.`;
